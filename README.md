@@ -47,15 +47,26 @@ from that firmware. No retained evidence confirms the interface under Klipper,
 so it is disabled in the sample. UART is optional here and is not used for
 homing.
 
-## Before installing
+## Installing
 
-Secure a verified full-flash SWD backup first. The vendor `GTM32Source.bin` is
-only an application image and is not a complete rollback backup. The tested
-Klipper build preserves the stock 28 KiB bootloader by placing Klipper at
-`0x08007000`, but the initial installation still requires SWD.
+The stock bootloader appears able to install Klipper from an SD card. This is
+the simplest likely path, so it is documented first, but it has **not yet been
+tested with Klipper**. Before trying it, make and verify a complete 512 KiB SWD
+backup so recovery does not depend on the bootloader.
 
-Read [the complete setup and rollback guide](docs/setup.md) before connecting a
-probe or writing flash.
+Build Klipper for the stock 28 KiB bootloader, then use the supplied packager:
+
+```sh
+python3 scripts/package_sd_update.py /path/to/klipper/out/klipper.bin
+```
+
+Copy the resulting `GTM32Source.bin` to the SD-card root and restart the
+printer. Remove the file after the update. A tested SWD flashing path remains
+available as the fallback and recovery method.
+
+Read [the complete SD, SWD, and rollback guide](docs/setup.md) before writing
+flash. The vendor `GTM32Source.bin` is only an application image and is not a
+complete rollback backup.
 
 ## Configuration files
 
@@ -80,7 +91,7 @@ finished print.
 
 ## License
 
-The original configuration, macros, and documentation in this repository are
-available under the [MIT License](LICENSE). Klipper is a separate project,
-distributed under GPL-3.0; it is not bundled here and must be obtained from its
-own project.
+The original configuration, macros, scripts, and documentation in this
+repository are available under the [MIT License](LICENSE). Klipper is a
+separate project, distributed under GPL-3.0; it is not bundled here and must be
+obtained from its own project.

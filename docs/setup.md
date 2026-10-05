@@ -1,4 +1,4 @@
-# Geeetech M1 Klipper setup and SWD flashing
+# Geeetech M1 Klipper setup, SD flashing, and SWD recovery
 
 This procedure is tested on one Geeetech M1 mainboard marked with an
 STM32F103/APM32E103 VET6-class MCU and an `8.000` MHz crystal. Confirm that your
@@ -75,7 +75,62 @@ The 28 KiB selection links the Klipper application for `0x08007000`, matching
 the recovered stock application start. The serial connection runs through the
 printer's CH340 bridge; the supplied config uses 250000 baud.
 
-## 3. Flash only the application region over SWD
+## 3. Package and flash from SD (experimental)
+
+The stock bootloader's SD update path is the simplest likely installation
+method, but it has not yet been tested with a Klipper image. Do not use it
+without the verified full-flash backup from step 1 and a working SWD recovery
+path.
+
+Run the packager from this repository, passing the Klipper build output:
+
+```sh
+python3 scripts/package_sd_update.py /path/to/klipper/out/klipper.bin
+```
+
+It creates `GTM32Source.bin` in the current directory. To write it to another
+existing directory, use `--output-directory DIRECTORY`. The script refuses to
+replace an existing image unless `--force` is given.
+
+Copy `GTM32Source.bin` to the root of an SD card recognized by the printer,
+insert it, and restart the printer. Allow the update to finish without
+interrupting power. Remove the file or card after the update before restarting
+again; otherwise the bootloader will attempt the same update on every boot.
+
+If the update does not start or Klipper does not connect afterward, use the SWD
+procedure below. Do not experiment with differently wrapped images: the
+recovered vendor format is a raw application binary.
+
+### Recovered bootloader behavior
+
+These details come from static analysis of the stock bootloader and comparison
+with complete vendor images:
+
+- The complete V1.30 vendor `GTM32Source.bin` matches the installed flash
+  byte-for-byte starting at `0x08007000`. It begins directly with the ARM vector
+  table and has no update header or signature trailer.
+- The updater recognizes the exact filename `GTM32Source.bin`, loads it at
+  `0x08007000`, and rejects a file size at or above `0x78000` bytes.
+- It erases the application region while retaining the stock bootloader and the
+  uppermost 4 KiB flash page.
+- Its programming loop writes complete 32-bit words and reads each word back
+  for comparison. It does not write a trailing partial word, so the packaging
+  script pads the image with `0xff` to a four-byte boundary.
+- No cryptographic signature, public-key, or hash verification path was found.
+  The read-back comparison is a programming check, not authentication.
+
+The script checks that its input is a non-empty regular file, that the padded
+image remains below the bootloader-specific `0x78000` limit, and that it will
+not accidentally overwrite its input or an existing output. It deliberately
+does not duplicate MCU, linker-address, or firmware-structure validation that
+belongs to the Klipper build: the menu configuration in step 2 must be selected
+correctly. It prints the packaged size, padding count, and SHA-256 for recording
+with the backup.
+
+Do not prepend `0x7000` bytes or add a header. Byte zero of the packaged file is
+byte zero of Klipper's `out/klipper.bin`.
+
+## 4. Alternative: flash only the application region over SWD
 
 Stop the Klipper service on the host if it is already running. With the target
 powered and the SWD probe connected, flash the raw binary at the application
@@ -93,7 +148,7 @@ Run this from the Klipper checkout, or replace `out/klipper.bin` with its full
 path. Do not issue a mass-erase command: the lower `0x7000` bytes contain the
 stock bootloader that this workflow intentionally preserves.
 
-## 4. Install and personalize the configuration
+## 5. Install and personalize the configuration
 
 Copy both the sample and macro directory into the Klipper configuration
 directory, then rename the sample:
@@ -132,7 +187,7 @@ and purge. The wipe height is the recovered vendor value of 0.5 mm; the default
 stroke count is reduced from 12 to 6. The purge speed is reduced from 6.5 to
 3 mm/s to avoid Klipper's maximum volumetric extrusion limit.
 
-## 5. Roll back to the captured stock image
+## 6. Roll back to the captured stock image
 
 Use only your own verified full-flash dump. With the printer halted and attached
 over SWD:
